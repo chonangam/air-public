@@ -1,0 +1,1516 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0a0e1a">
+<title>대기측정망 모니터링</title>
+
+<!-- PWA: 안드로이드/iOS 홈 화면 설치 지원 -->
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+<link rel="apple-touch-icon" href="icon.svg">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="대기측정망">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="description" content="경기도 14개시 61개 측정소 실시간 대기질 모니터링">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;700&family=Noto+Sans+KR:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0e1a;
+    --bg-card: #131826;
+    --bg-elev: #1a2034;
+    --bg-deep: #060912;
+    --border: #2a3148;
+    --border-soft: #1f2538;
+    --text: #f5f5f0;
+    --text-dim: #8a92a8;
+    --text-mute: #5a6280;
+
+    /* 환경부 통합대기환경지수 4단계 */
+    --good: #1e88e5;       /* 좋음 - 파랑 */
+    --normal: #43a047;     /* 보통 - 초록 */
+    --bad: #fb8c00;        /* 나쁨 - 주황 (노랑 대신 가독성) */
+    --vbad: #e53935;       /* 매우나쁨 - 빨강 */
+    --missing: #6b7280;    /* 결측 - 회색 */
+    --offline: #9333ea;    /* 통신두절 - 보라 */
+  }
+
+  html, body {
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Noto Sans KR', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    background:
+      radial-gradient(ellipse 80% 30% at 50% 0%, rgba(67,160,71,0.06), transparent 60%),
+      radial-gradient(ellipse 60% 30% at 100% 100%, rgba(229,57,53,0.04), transparent 60%),
+      var(--bg);
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  /* Header */
+  header {
+    padding: 20px 20px 12px;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .brand-icon {
+    width: 38px; height: 38px;
+    background: linear-gradient(135deg, var(--normal), var(--good));
+    border-radius: 10px;
+    display: grid;
+    place-items: center;
+    font-size: 20px;
+    box-shadow: 0 0 24px rgba(67,160,71,0.25);
+  }
+  h1 {
+    font-size: 17px;
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: -0.3px;
+  }
+  .sub {
+    font-size: 11px;
+    color: var(--text-mute);
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    font-weight: 500;
+    margin-top: 2px;
+  }
+
+  .icon-btn {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .icon-btn:hover { color: var(--text); border-color: var(--text-mute); }
+  .icon-btn:active { transform: scale(0.94); }
+  .icon-btn svg { width: 17px; height: 17px; }
+
+  /* Stats bar */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .stat {
+    background: var(--bg-card);
+    border: 1px solid var(--border-soft);
+    border-radius: 10px;
+    padding: 10px 12px;
+  }
+  .stat-label {
+    font-size: 10px;
+    color: var(--text-mute);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-weight: 600;
+    margin-bottom: 3px;
+  }
+  .stat-val {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1;
+  }
+  .stat-val .total { color: var(--text-mute); font-size: 13px; font-weight: 500; }
+  .stat.normal .stat-val { color: var(--normal); }
+  .stat.warn .stat-val { color: var(--bad); }
+  .stat.crit .stat-val { color: var(--vbad); }
+
+  .live-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--text-mute);
+  }
+  .live-left { display: flex; align-items: center; gap: 8px; }
+  .live-dot {
+    width: 6px; height: 6px;
+    background: var(--normal);
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+  }
+  .live-dot.stale { background: var(--bad); animation: none; }
+  .live-dot.error { background: var(--vbad); animation: none; }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.7); }
+  }
+
+  .refresh-btn {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    padding: 4px 6px;
+    font-family: inherit;
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    border-radius: 6px;
+  }
+  .refresh-btn:hover { background: var(--bg-elev); color: var(--text); }
+  .refresh-btn svg { width: 12px; height: 12px; }
+  .refresh-btn.spinning svg { animation: spin 0.8s linear; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Tabs */
+  .tabs {
+    display: flex;
+    gap: 4px;
+    padding: 0 20px;
+    border-bottom: 1px solid var(--border-soft);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab {
+    background: none;
+    border: none;
+    color: var(--text-mute);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 14px 14px 12px;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: color 0.15s;
+  }
+  .tab:hover { color: var(--text-dim); }
+  .tab.active {
+    color: var(--text);
+    border-bottom-color: var(--good);
+  }
+  .tab .badge {
+    background: var(--bg-elev);
+    color: var(--text-dim);
+    padding: 1px 7px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+  .tab.active .badge { background: var(--good); color: white; }
+  .tab.alert .badge { background: var(--vbad); color: white; }
+
+  /* Content */
+  main {
+    padding: 16px 16px 80px;
+  }
+
+  /* Priority cards */
+  .priority-list { display: flex; flex-direction: column; gap: 10px; }
+
+  .pcard {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--bad);
+    border-radius: 10px;
+    padding: 14px 16px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 12px;
+    align-items: center;
+  }
+  .pcard.crit { border-left-color: var(--vbad); }
+  .pcard.miss { border-left-color: var(--missing); }
+  .pcard.off { border-left-color: var(--offline); }
+
+  .pcard-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+  .pcard-tag {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 4px;
+    letter-spacing: 1px;
+    color: white;
+  }
+  .pcard-tag.bad { background: var(--bad); }
+  .pcard-tag.vbad { background: var(--vbad); }
+  .pcard-tag.miss { background: var(--missing); }
+  .pcard-tag.off { background: var(--offline); }
+  .pcard-where {
+    font-size: 14px;
+    font-weight: 700;
+  }
+  .pcard-where .city { color: var(--text-mute); font-weight: 500; }
+  .pcard-detail {
+    font-size: 12px;
+    color: var(--text-dim);
+    font-family: 'IBM Plex Mono', monospace;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 12px;
+  }
+  .pcard-detail .k { color: var(--text-mute); }
+  .pcard-detail .crit { color: var(--vbad); font-weight: 700; }
+  .pcard-detail .warn { color: var(--bad); font-weight: 700; }
+
+  .pcard-time {
+    text-align: right;
+    font-size: 11px;
+    color: var(--text-mute);
+    font-family: 'IBM Plex Mono', monospace;
+    min-width: 80px;
+  }
+  .pcard-time .ago { color: var(--bad); font-weight: 700; font-size: 13px; display: block; }
+
+  /* Grid view (전체 현황) */
+  .city-group { margin-bottom: 22px; }
+  .city-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    padding-bottom: 6px;
+    border-bottom: 1px dashed var(--border-soft);
+  }
+  .city-name {
+    font-size: 16px;
+    font-weight: 700;
+  }
+  .city-count {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--text-mute);
+  }
+
+  .stn-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 8px;
+  }
+
+  .stn {
+    background: var(--bg-card);
+    border: 1px solid var(--border-soft);
+    border-radius: 8px;
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+    position: relative;
+    overflow: hidden;
+  }
+  .stn:hover { border-color: var(--text-mute); }
+  .stn::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: var(--missing);
+  }
+  .stn.good::before { background: var(--good); }
+  .stn.normal::before { background: var(--normal); }
+  .stn.bad::before { background: var(--bad); }
+  .stn.vbad::before { background: var(--vbad); }
+  .stn.off::before { background: var(--offline); }
+
+  .stn-name {
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 4px;
+    line-height: 1.2;
+  }
+  .stn-grade {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 3px;
+    display: inline-block;
+    margin-bottom: 6px;
+    letter-spacing: 0.5px;
+    color: white;
+  }
+  .stn-grade.good { background: var(--good); }
+  .stn-grade.normal { background: var(--normal); }
+  .stn-grade.bad { background: var(--bad); }
+  .stn-grade.vbad { background: var(--vbad); }
+  .stn-grade.miss { background: var(--missing); }
+  .stn-grade.off { background: var(--offline); }
+  .stn-vals {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px 8px;
+  }
+  .stn-vals .v { color: var(--text); }
+  .stn-vals .v.warn { color: var(--bad); }
+  .stn-vals .v.crit { color: var(--vbad); }
+  .stn-vals .v.miss { color: var(--missing); }
+
+  /* Filter mapping tab */
+  .filter-stn {
+    background: var(--bg-card);
+    border: 1px solid var(--border-soft);
+    border-radius: 10px;
+    padding: 14px;
+    margin-bottom: 8px;
+  }
+  .filter-stn-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+  .filter-stn-name {
+    font-size: 14px;
+    font-weight: 700;
+  }
+  .filter-stn-name .city { color: var(--text-mute); font-weight: 500; font-size: 12px; margin-right: 6px; }
+  .filter-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .filter-row {
+    display: grid;
+    grid-template-columns: 1fr 80px 60px 28px;
+    gap: 8px;
+    align-items: center;
+    padding: 6px 0;
+    border-top: 1px solid var(--border-soft);
+  }
+  .filter-row input {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 8px;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 12px;
+    outline: none;
+  }
+  .filter-row input:focus { border-color: var(--good); }
+  .filter-row .remaining {
+    text-align: center;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .filter-row .remaining.warn { color: var(--bad); }
+  .filter-row .remaining.crit { color: var(--vbad); }
+  .filter-add {
+    background: var(--bg-elev);
+    border: 1px dashed var(--border);
+    color: var(--text-dim);
+    width: 100%;
+    padding: 6px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 12px;
+    margin-top: 6px;
+  }
+  .filter-add:hover { color: var(--text); border-color: var(--text-mute); }
+
+  .icon-x {
+    background: none;
+    border: none;
+    color: var(--text-mute);
+    cursor: pointer;
+    padding: 2px;
+  }
+  .icon-x:hover { color: var(--vbad); }
+
+  /* States */
+  .empty {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-dim);
+  }
+  .empty .emoji { font-size: 36px; margin-bottom: 12px; }
+  .empty .title { font-size: 15px; color: var(--text); font-weight: 700; margin-bottom: 6px; }
+  .empty .desc { font-size: 13px; line-height: 1.5; }
+
+  .skeleton {
+    background: linear-gradient(90deg, var(--bg-elev) 0%, var(--border) 50%, var(--bg-elev) 100%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+    border-radius: 6px;
+  }
+  @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
+  /* Modal */
+  .modal-bg {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.7);
+    backdrop-filter: blur(8px);
+    z-index: 100;
+    display: none;
+    align-items: flex-end;
+    justify-content: center;
+  }
+  .modal-bg.open { display: flex; animation: fade 0.2s; }
+  @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+
+  .modal {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-bottom: none;
+    border-radius: 20px 20px 0 0;
+    width: 100%;
+    max-width: 560px;
+    max-height: 90vh;
+    overflow-y: auto;
+    padding: 8px 20px 32px;
+    animation: slideUp 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+
+  .modal-handle {
+    width: 40px; height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    margin: 8px auto 16px;
+  }
+  .modal-title { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
+  .modal-sub { font-size: 12px; color: var(--text-dim); margin-bottom: 18px; }
+
+  .field { margin-bottom: 14px; }
+  .field-label {
+    display: block;
+    font-size: 10px;
+    color: var(--text-mute);
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+  .field-help {
+    font-size: 11px;
+    color: var(--text-mute);
+    margin-top: 5px;
+    line-height: 1.4;
+  }
+  input[type="text"], input[type="password"], input[type="number"] {
+    width: 100%;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    outline: none;
+    transition: border 0.15s;
+  }
+  input:focus { border-color: var(--good); }
+
+  .threshold-grid {
+    display: grid;
+    grid-template-columns: 80px 1fr 60px;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  .threshold-grid .label { font-size: 12px; font-weight: 600; }
+  .threshold-grid .unit { font-size: 11px; color: var(--text-mute); }
+
+  .btn {
+    padding: 10px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg-elev);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn:hover { border-color: var(--text-mute); }
+  .btn:active { transform: scale(0.97); }
+  .btn-primary {
+    background: var(--good);
+    color: white;
+    border-color: var(--good);
+  }
+  .btn-full { width: 100%; }
+
+  .modal-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 18px;
+  }
+  .modal-actions .btn { flex: 1; }
+
+  .hint {
+    background: var(--bg-elev);
+    border-left: 3px solid var(--good);
+    padding: 10px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    color: var(--text-dim);
+    line-height: 1.5;
+    margin-bottom: 14px;
+  }
+  .hint a { color: var(--good); text-decoration: none; }
+
+  /* Detail modal (측정소 클릭 시) */
+  .detail-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .detail-cell {
+    background: var(--bg-elev);
+    border: 1px solid var(--border-soft);
+    border-radius: 8px;
+    padding: 10px 12px;
+    text-align: center;
+  }
+  .detail-cell .k {
+    font-size: 10px;
+    color: var(--text-mute);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .detail-cell .v {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 18px;
+    font-weight: 700;
+  }
+  .detail-cell .u {
+    font-family: 'Noto Sans KR', sans-serif;
+    font-size: 10px;
+    color: var(--text-mute);
+    margin-left: 2px;
+    font-weight: 500;
+  }
+
+  /* Tablet/Desktop */
+  @media (min-width: 768px) {
+    .stats { grid-template-columns: repeat(4, 1fr); }
+    .pcard { grid-template-columns: 1fr auto; }
+  }
+
+  /* Mismatch warning */
+  .mismatch {
+    background: rgba(229,57,53,0.1);
+    border: 1px solid rgba(229,57,53,0.3);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  .mismatch strong { color: var(--vbad); }
+  .mismatch ul { list-style: none; margin-top: 6px; padding-left: 0; }
+  .mismatch li { font-family: 'IBM Plex Mono', monospace; font-size: 11px; padding: 2px 0; }
+
+  .mm-list { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+  .mm-item {
+    background: rgba(0,0,0,0.25);
+    border-radius: 6px;
+    padding: 8px 10px;
+  }
+  .mm-target { font-size: 12px; margin-bottom: 6px; }
+  .mm-city { color: var(--text-mute); font-size: 11px; }
+  .mm-candidates { display: flex; flex-wrap: wrap; gap: 5px; }
+  .mm-btn {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 4px 10px;
+    border-radius: 14px;
+    font-family: inherit;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .mm-btn:hover { background: var(--good); border-color: var(--good); color: white; }
+  .mm-btn:active { transform: scale(0.95); }
+  .mm-empty { font-size: 11px; color: var(--text-mute); font-style: italic; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-row">
+    <div class="brand">
+      <div class="brand-icon">🌫️</div>
+      <div>
+        <h1>대기측정망 모니터링</h1>
+        <div class="sub" id="brandSub">경기 14개시 · 61측정소</div>
+      </div>
+    </div>
+    <button class="icon-btn" id="settingsBtn" aria-label="설정">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+    </button>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="stat-label">전체</div><div class="stat-val" id="statTotal">— <span class="total">/61</span></div></div>
+    <div class="stat normal"><div class="stat-label">정상</div><div class="stat-val" id="statOk">—</div></div>
+    <div class="stat warn"><div class="stat-label">이상</div><div class="stat-val" id="statWarn">—</div></div>
+    <div class="stat crit"><div class="stat-label">결측</div><div class="stat-val" id="statMiss">—</div></div>
+  </div>
+
+  <div class="live-bar">
+    <div class="live-left">
+      <span class="live-dot" id="liveDot"></span>
+      <span id="liveStatus">대기 중</span>
+    </div>
+    <button class="refresh-btn" id="refreshBtn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+      <span>새로고침</span>
+    </button>
+  </div>
+</header>
+
+<nav class="tabs">
+  <button class="tab active" data-tab="priority">🚨 점검 우선순위 <span class="badge" id="badgePriority">—</span></button>
+  <button class="tab" data-tab="overview">📊 전체 현황</button>
+  <button class="tab" data-tab="filter">🔧 필터 매핑</button>
+</nav>
+
+<main id="content">
+  <div class="empty">
+    <div class="emoji">🔑</div>
+    <div class="title">API 키 설정이 필요합니다</div>
+    <div class="desc">우측 상단 ⚙️ 버튼을 눌러<br>공공데이터포털 서비스키를 입력하세요</div>
+  </div>
+</main>
+
+<!-- Settings Modal -->
+<div class="modal-bg" id="settingsModal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <h2 class="modal-title">설정</h2>
+    <p class="modal-sub">에어코리아 API 및 임계값 설정</p>
+
+    <div class="hint">
+      📍 <a href="https://www.data.go.kr" target="_blank">공공데이터포털</a>에서<br>
+      "한국환경공단 에어코리아 대기오염정보" 활용신청 → 마이페이지에서 Decoding 키 발급
+    </div>
+
+    <div class="field">
+      <label class="field-label">서비스 키 (Decoding)</label>
+      <input type="password" id="apiKeyInput" placeholder="공공데이터포털 인증키">
+    </div>
+
+    <div class="field">
+      <label class="field-label">CORS 프록시 (브라우저 사용 시)</label>
+      <input type="text" id="proxyInput" placeholder="비워두면 직접 호출 / 예: https://corsproxy.io/?">
+      <div class="field-help">※ Android WebView로 빌드하면 비워두세요</div>
+    </div>
+
+    <div class="field">
+      <label class="field-label">이상값 임계 (1시간 평균)</label>
+      <div class="threshold-grid"><span class="label">PM10</span><input type="number" id="th_pm10" step="1"><span class="unit">㎍/㎥</span></div>
+      <div class="threshold-grid"><span class="label">PM2.5</span><input type="number" id="th_pm25" step="1"><span class="unit">㎍/㎥</span></div>
+      <div class="threshold-grid"><span class="label">NO₂</span><input type="number" id="th_no2" step="0.001"><span class="unit">ppm</span></div>
+      <div class="threshold-grid"><span class="label">O₃</span><input type="number" id="th_o3" step="0.001"><span class="unit">ppm</span></div>
+      <div class="threshold-grid"><span class="label">CO</span><input type="number" id="th_co" step="0.1"><span class="unit">ppm</span></div>
+      <div class="threshold-grid"><span class="label">SO₂</span><input type="number" id="th_so2" step="0.001"><span class="unit">ppm</span></div>
+      <div class="field-help">환경부 1시간 대기환경기준 기반. 점검 시 더 보수적인 값(낮게) 설정 권장</div>
+    </div>
+
+    <div class="field">
+      <label class="field-label">자동 갱신 주기</label>
+      <input type="number" id="refreshMin" step="1" min="5" placeholder="분 단위 (최소 5)">
+      <div class="field-help">에어코리아는 1시간 단위 갱신이라 5~10분이면 충분합니다</div>
+    </div>
+
+    <div class="field">
+      <label class="field-label">측정소 매핑 초기화</label>
+      <button class="btn btn-full" id="resetStations" style="background:rgba(229,57,53,0.15);border-color:rgba(229,57,53,0.4);color:var(--vbad);">
+        🔄 HTML 코드에서 측정소 목록 다시 읽기
+      </button>
+      <div class="field-help">HTML 파일을 수정했는데 반영이 안 될 때 사용. API 키·임계값·필터 매핑은 유지됩니다.</div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn" id="cancelSettings">취소</button>
+      <button class="btn btn-primary" id="saveSettings">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- Detail Modal -->
+<div class="modal-bg" id="detailModal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <h2 class="modal-title" id="detailTitle">측정소</h2>
+    <p class="modal-sub" id="detailSub">— · —</p>
+
+    <div class="detail-grid" id="detailGrid"></div>
+
+    <div class="field">
+      <label class="field-label">측정 시각</label>
+      <div id="detailTime" style="font-family: 'IBM Plex Mono', monospace; font-size: 13px;">—</div>
+    </div>
+
+    <div class="field" id="detailFlags"></div>
+
+    <div class="modal-actions">
+      <button class="btn btn-full" id="closeDetail">닫기</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ========================================================
+ * 대기측정망 모니터링 대시보드
+ * 데이터: 한국환경공단 에어코리아 (getCtprvnRltmMesureDnsty)
+ * 사도별 1회 호출 → 경기도 전체 측정소 데이터 → 클라이언트 필터링
+ * ======================================================== */
+
+const STORAGE_KEY = 'airdash_v1';
+
+/* ---------------- 담당 측정소 ---------------- */
+const MY_STATIONS = {
+  "고양시":   ["식사동","신원동","백마로","주엽동","행신동"],
+  "김포시":   ["고촌읍","사우동","월곶면","한강신도시","한강로"],
+  "양주시":   ["고읍","백석읍","남면","옥정신도시"],
+  "의정부시": ["송산3동","의정부동","의정부1동"],
+  "구리시":   ["교문동","동구동"],
+  "동두천시": ["보산동"],
+  "남양주시": ["금곡동","별내동","오남읍","와부읍","진접읍","화도읍","경춘로"],
+  "여주시":   ["가남읍","대신면","중앙동"],
+  "이천시":   ["부발읍","장호원읍","창전동"],
+  "시흥시":   ["대야동","목감동","배곧동","서해안로","시화산단","장현동","정왕동"],
+  "군포시":   ["당동","산본동"],
+  "안양시":   ["부림동","안양2동","안양8동","호계3동"],
+  "화성시":   ["남양읍","동탄","우정읍","서신면","새솔동","봉담읍","청계동","향남읍","동탄기흥로(영천동)"],
+  "평택시":   ["평택항","청북읍","안중읍","송북동","고덕동","비전동"]
+};
+
+// 측정소명 → 시 역인덱스
+const STATION_TO_CITY = {};
+for (const [city, stns] of Object.entries(MY_STATIONS)) {
+  for (const s of stns) STATION_TO_CITY[s] = city;
+}
+const TOTAL_COUNT = Object.values(MY_STATIONS).reduce((a,b) => a + b.length, 0);
+
+/* ---------------- 기본 설정 ---------------- */
+const DEFAULT = {
+  apiKey: '',
+  proxy: '',
+  refreshMin: 10,
+  thresholds: {
+    pm10: 80,    // ㎍/㎥ (24시간 100, 1시간은 안전마진 두고 80)
+    pm25: 35,    // ㎍/㎥
+    no2:  0.10,  // ppm (1시간 환경기준)
+    o3:   0.12,  // ppm (오존 주의보 발령 기준)
+    co:   25,    // ppm (1시간 환경기준)
+    so2:  0.15   // ppm (1시간 환경기준)
+  },
+  filters: {}  // { "사우동": [{ name, type, lastReplaced, intervalDays }, ...] }
+};
+
+let cfg = loadCfg();
+
+// 저장된 측정소 매핑 복원 (사용자가 후보 클릭으로 수정한 내역)
+if (cfg.stations) {
+  for (const k of Object.keys(MY_STATIONS)) delete MY_STATIONS[k];
+  Object.assign(MY_STATIONS, cfg.stations);
+  for (const k of Object.keys(STATION_TO_CITY)) delete STATION_TO_CITY[k];
+  for (const [city, stns] of Object.entries(MY_STATIONS)) {
+    for (const s of stns) STATION_TO_CITY[s] = city;
+  }
+}
+let lastData = [];          // 최근 fetch 결과 (담당 측정소만)
+let mismatched = [];        // 응답에 없는 우리 측정소 이름
+let lastFetchTime = null;
+let currentTab = 'priority';
+let refreshTimer = null;
+
+/* ---------------- Storage ---------------- */
+function loadCfg() {
+  try {
+    const s = localStorage.getItem(STORAGE_KEY);
+    if (s) {
+      const parsed = JSON.parse(s);
+      return {
+        ...DEFAULT,
+        ...parsed,
+        thresholds: { ...DEFAULT.thresholds, ...(parsed.thresholds || {}) },
+        filters: parsed.filters || {}
+      };
+    }
+  } catch(e) {}
+  return JSON.parse(JSON.stringify(DEFAULT));
+}
+function saveCfg() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg));
+}
+
+/* ---------------- API ---------------- */
+async function fetchAllGyeonggi() {
+  if (!cfg.apiKey) throw new Error('서비스 키가 설정되지 않았습니다');
+  const base = 'https://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getCtprvnRltmMesureDnsty';
+  const qs = new URLSearchParams({
+    serviceKey: cfg.apiKey,
+    returnType: 'json',
+    numOfRows: '500',
+    pageNo: '1',
+    sidoName: '경기',
+    ver: '1.0'
+  }).toString();
+  let url = base + '?' + qs;
+  if (cfg.proxy) url = cfg.proxy + encodeURIComponent(url);
+
+  const res = await fetch(url);
+  const text = await res.text();
+
+  // HTTP 에러 시에도 본문에 공공데이터포털 진단 메시지가 있을 수 있음
+  if (!res.ok) {
+    // XML 에러 본문 파싱 시도
+    let diag = '';
+    const m1 = text.match(/<returnAuthMsg>([^<]+)<\/returnAuthMsg>/);
+    const m2 = text.match(/<returnReasonCode>([^<]+)<\/returnReasonCode>/);
+    if (m1 || m2) {
+      diag = ` [${m2?.[1] || '?'}] ${m1?.[1] || ''}`;
+    }
+    if (res.status === 403) {
+      throw new Error(`403${diag} — 키 미활성화(신청 후 1시간 대기) 또는 프록시 거부. 자세히는 콘솔(F12) 확인`);
+    }
+    throw new Error(`HTTP ${res.status}${diag}`);
+  }
+
+  // 에어코리아가 가끔 XML 에러를 JSON처럼 보낼 때가 있어서 견고하게
+  let data;
+  try { data = JSON.parse(text); }
+  catch(e) {
+    // XML 응답 진단
+    const m1 = text.match(/<returnAuthMsg>([^<]+)<\/returnAuthMsg>/);
+    const m2 = text.match(/<returnReasonCode>([^<]+)<\/returnReasonCode>/);
+    if (m1 || m2) {
+      throw new Error(`API 인증오류 [${m2?.[1] || '?'}]: ${m1?.[1] || '알 수 없음'}`);
+    }
+    throw new Error('응답 파싱 실패: ' + text.slice(0,100));
+  }
+
+  // 에러 응답 체크
+  const header = data?.response?.header;
+  if (header && header.resultCode && header.resultCode !== '00') {
+    throw new Error(`API 오류 (${header.resultCode}): ${header.resultMsg}`);
+  }
+
+  const items = data?.response?.body?.items || [];
+  return Array.isArray(items) ? items : [items];
+}
+
+/* ---------------- 데이터 분석 ---------------- */
+function num(v) {
+  if (v == null || v === '' || v === '-') return null;
+  const n = Number(v);
+  return isFinite(n) ? n : null;
+}
+
+function gradeOf(g) {
+  const n = Number(g);
+  if (n === 1) return 'good';
+  if (n === 2) return 'normal';
+  if (n === 3) return 'bad';
+  if (n === 4) return 'vbad';
+  return 'miss';
+}
+function gradeLabel(g) {
+  return { good:'좋음', normal:'보통', bad:'나쁨', vbad:'매우나쁨', miss:'결측', off:'두절' }[g] || '—';
+}
+
+function analyzeStation(item) {
+  // item: 에어코리아 응답 한 건
+  const flags = {
+    pm10: item.pm10Flag, pm25: item.pm25Flag, no2: item.no2Flag,
+    o3: item.o3Flag, co: item.coFlag, so2: item.so2Flag
+  };
+  const vals = {
+    pm10: num(item.pm10Value), pm25: num(item.pm25Value),
+    no2:  num(item.no2Value),  o3:   num(item.o3Value),
+    co:   num(item.coValue),   so2:  num(item.so2Value)
+  };
+  const t = cfg.thresholds;
+  const over = {
+    pm10: vals.pm10 != null && vals.pm10 > t.pm10,
+    pm25: vals.pm25 != null && vals.pm25 > t.pm25,
+    no2:  vals.no2  != null && vals.no2  > t.no2,
+    o3:   vals.o3   != null && vals.o3   > t.o3,
+    co:   vals.co   != null && vals.co   > t.co,
+    so2:  vals.so2  != null && vals.so2  > t.so2
+  };
+
+  // 결측: 모든 주요 값이 null
+  const allNull = vals.pm10 == null && vals.pm25 == null && vals.no2 == null && vals.o3 == null;
+  // 통신두절: dataTime이 2시간 이상 지났으면
+  let staleMin = null;
+  if (item.dataTime) {
+    const dt = new Date(item.dataTime.replace(' ', 'T') + '+09:00');
+    if (!isNaN(dt.getTime())) {
+      staleMin = Math.floor((Date.now() - dt.getTime()) / 60000);
+    }
+  }
+  const offline = staleMin != null && staleMin > 120;
+
+  // 부분 결측 (한두 항목만 결측)
+  const missingItems = Object.entries(flags)
+    .filter(([k, f]) => f != null && f !== '')
+    .map(([k, f]) => ({ key: k, flag: f }));
+
+  // 우선순위 등급
+  let priority = 'ok';
+  if (offline) priority = 'offline';
+  else if (allNull) priority = 'missing';
+  else if (Object.values(over).some(Boolean)) priority = 'over';
+  else if (missingItems.length > 0) priority = 'partial';
+
+  // 통합 등급
+  const khai = gradeOf(item.khaiGrade);
+
+  return { vals, flags, over, allNull, offline, staleMin, missingItems, priority, khai };
+}
+
+function processData(items) {
+  const byName = {};
+  for (const it of items) byName[it.stationName] = it;
+  const allNames = Object.keys(byName);
+
+  // 우리가 등록한 모든 측정소명 (이미 매칭된 것 제외 후 후보 추천에 사용)
+  const myAllStations = new Set();
+  for (const stns of Object.values(MY_STATIONS)) for (const s of stns) myAllStations.add(s);
+
+  const result = [];
+  mismatched = [];
+
+  for (const [city, stns] of Object.entries(MY_STATIONS)) {
+    for (const stn of stns) {
+      const item = byName[stn];
+      if (item) {
+        result.push({
+          city, station: stn,
+          ...analyzeStation(item),
+          raw: item
+        });
+      } else {
+        // 비슷한 이름 자동 추천
+        const candidates = findCandidates(stn, allNames, myAllStations);
+        mismatched.push({ city, station: stn, candidates });
+      }
+    }
+  }
+  return result;
+}
+
+function findCandidates(target, allNames, claimed) {
+  const t = target.replace(/[()]/g, '').replace(/\s+/g, '');
+  // 1) target을 포함하는 이름
+  // 2) target의 처음 2글자로 시작하는 이름
+  // 3) target이 포함된 이름
+  const scored = [];
+  for (const name of allNames) {
+    if (claimed.has(name)) continue;  // 이미 다른 측정소에 매칭된 이름은 제외
+    const n = name.replace(/[()]/g, '').replace(/\s+/g, '');
+    let score = 0;
+    if (n === t) score = 100;
+    else if (n.includes(t) || t.includes(n)) score = 80;
+    else if (t.length >= 2 && n.startsWith(t.substring(0, 2))) score = 60;
+    else if (t.length >= 2 && n.includes(t.substring(0, 2))) score = 40;
+    if (score > 0) scored.push({ name, score });
+  }
+  return scored.sort((a, b) => b.score - a.score).slice(0, 5).map(x => x.name);
+}
+
+/* ---------------- 렌더링 ---------------- */
+function updateStats() {
+  let ok = 0, warn = 0, miss = 0;
+  for (const s of lastData) {
+    if (s.priority === 'ok') ok++;
+    else if (s.priority === 'over' || s.priority === 'partial') warn++;
+    else if (s.priority === 'missing' || s.priority === 'offline') miss++;
+  }
+  document.getElementById('statTotal').innerHTML = `${lastData.length} <span class="total">/${TOTAL_COUNT}</span>`;
+  document.getElementById('statOk').textContent = ok;
+  document.getElementById('statWarn').textContent = warn;
+  document.getElementById('statMiss').textContent = miss;
+
+  const alerts = warn + miss;
+  const badge = document.getElementById('badgePriority');
+  badge.textContent = alerts;
+  document.querySelector('[data-tab="priority"]').classList.toggle('alert', alerts > 0);
+}
+
+function setLive(text, state) {
+  const dot = document.getElementById('liveDot');
+  dot.classList.remove('stale', 'error');
+  if (state === 'error') dot.classList.add('error');
+  else if (state === 'stale') dot.classList.add('stale');
+  document.getElementById('liveStatus').textContent = text;
+}
+
+function renderTab() {
+  const root = document.getElementById('content');
+  if (!cfg.apiKey) {
+    root.innerHTML = `<div class="empty">
+      <div class="emoji">🔑</div>
+      <div class="title">API 키 설정이 필요합니다</div>
+      <div class="desc">우측 상단 ⚙️ 버튼을 눌러<br>공공데이터포털 서비스키를 입력하세요</div>
+    </div>`;
+    return;
+  }
+
+  if (lastData.length === 0) {
+    root.innerHTML = `<div class="empty">
+      <div class="emoji">⏳</div>
+      <div class="title">데이터 불러오는 중…</div>
+      <div class="desc">에어코리아 API 호출 중</div>
+    </div>`;
+    return;
+  }
+
+  if (currentTab === 'priority') renderPriority(root);
+  else if (currentTab === 'overview') renderOverview(root);
+  else if (currentTab === 'filter') renderFilter(root);
+}
+
+function renderPriority(root) {
+  // 점검 우선순위 정렬: offline > missing > over > partial
+  const order = { offline: 0, missing: 1, over: 2, partial: 3, ok: 4 };
+  const priority = lastData
+    .filter(s => s.priority !== 'ok')
+    .sort((a, b) => order[a.priority] - order[b.priority]);
+
+  let html = '';
+
+  // 매칭 안 된 측정소 경고
+  if (mismatched.length > 0) {
+    html += `<div class="mismatch">
+      <strong>⚠️ 응답에서 찾지 못한 측정소 (${mismatched.length})</strong><br>
+      아래 후보 중 맞는 것을 탭하면 자동으로 교체됩니다.
+      <div class="mm-list">${mismatched.map((m, i) => `
+        <div class="mm-item">
+          <div class="mm-target"><span class="mm-city">${m.city}</span> · <strong>${m.station}</strong></div>
+          ${m.candidates.length > 0
+            ? `<div class="mm-candidates">${m.candidates.map(c => `<button class="mm-btn" data-city="${m.city}" data-old="${m.station}" data-new="${c}">${c}</button>`).join('')}</div>`
+            : `<div class="mm-empty">유사 측정소 없음 (이름 폐쇄/변경 가능성)</div>`}
+        </div>`).join('')}</div>
+    </div>`;
+  }
+
+  if (priority.length === 0) {
+    html += `<div class="empty">
+      <div class="emoji">✅</div>
+      <div class="title">모든 측정소 정상</div>
+      <div class="desc">이상값·결측·통신두절 측정소가 없습니다</div>
+    </div>`;
+    root.innerHTML = html;
+    return;
+  }
+
+  html += '<div class="priority-list">';
+  for (const s of priority) {
+    html += renderPCard(s);
+  }
+  html += '</div>';
+  root.innerHTML = html;
+
+  // 클릭 핸들러
+  root.querySelectorAll('.pcard').forEach(el => {
+    el.addEventListener('click', () => openDetail(el.dataset.station));
+  });
+  // 매칭 후보 클릭 → 측정소명 자동 교체
+  root.querySelectorAll('.mm-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const city = btn.dataset.city;
+      const oldName = btn.dataset.old;
+      const newName = btn.dataset.new;
+      const arr = MY_STATIONS[city];
+      if (!arr) return;
+      const idx = arr.indexOf(oldName);
+      if (idx === -1) return;
+      arr[idx] = newName;
+      // 필터 매핑 키도 옮기기
+      if (cfg.filters[oldName]) {
+        cfg.filters[newName] = cfg.filters[oldName];
+        delete cfg.filters[oldName];
+      }
+      // STATION_TO_CITY 역인덱스도 갱신
+      delete STATION_TO_CITY[oldName];
+      STATION_TO_CITY[newName] = city;
+      // 변경된 매핑 저장
+      cfg.stations = JSON.parse(JSON.stringify(MY_STATIONS));
+      saveCfg();
+      refresh(true);
+    });
+  });
+}
+
+function renderPCard(s) {
+  let tagCls, tagText, cardCls;
+  if (s.priority === 'offline') {
+    tagCls = 'off'; tagText = '통신두절'; cardCls = 'off';
+  } else if (s.priority === 'missing') {
+    tagCls = 'miss'; tagText = '전체결측'; cardCls = 'miss';
+  } else if (s.priority === 'over') {
+    const exceeded = Object.entries(s.over).filter(([k,v]) => v).map(([k]) => k.toUpperCase());
+    tagCls = exceeded.length >= 2 ? 'vbad' : 'bad';
+    cardCls = exceeded.length >= 2 ? 'crit' : '';
+    tagText = exceeded.length >= 2 ? `${exceeded.length}항목 초과` : `${exceeded[0]} 초과`;
+  } else {
+    tagCls = 'miss'; tagText = '부분결측'; cardCls = 'miss';
+  }
+
+  const details = [];
+  if (s.vals.pm10 != null) details.push(`<span class="${s.over.pm10 ? 'crit' : ''}"><span class="k">PM10</span> ${s.vals.pm10}</span>`);
+  else if (s.flags.pm10) details.push(`<span><span class="k">PM10</span> [${s.flags.pm10}]</span>`);
+  if (s.vals.pm25 != null) details.push(`<span class="${s.over.pm25 ? 'crit' : ''}"><span class="k">PM2.5</span> ${s.vals.pm25}</span>`);
+  else if (s.flags.pm25) details.push(`<span><span class="k">PM2.5</span> [${s.flags.pm25}]</span>`);
+  if (s.vals.no2 != null) details.push(`<span class="${s.over.no2 ? 'warn' : ''}"><span class="k">NO₂</span> ${s.vals.no2.toFixed(3)}</span>`);
+  if (s.vals.o3 != null) details.push(`<span class="${s.over.o3 ? 'warn' : ''}"><span class="k">O₃</span> ${s.vals.o3.toFixed(3)}</span>`);
+
+  const timeInfo = s.raw.dataTime || '—';
+  const ago = s.staleMin != null
+    ? (s.staleMin < 60 ? `${s.staleMin}분 전` : `${Math.floor(s.staleMin/60)}시간 전`)
+    : '';
+
+  return `<div class="pcard ${cardCls}" data-station="${s.station}">
+    <div>
+      <div class="pcard-head">
+        <span class="pcard-tag ${tagCls}">${tagText}</span>
+        <span class="pcard-where"><span class="city">${s.city}</span> ${s.station}</span>
+      </div>
+      <div class="pcard-detail">${details.join('')}</div>
+    </div>
+    <div class="pcard-time">
+      ${ago && s.priority === 'offline' ? `<span class="ago">${ago}</span>` : ''}
+      ${timeInfo.slice(11, 16)}
+    </div>
+  </div>`;
+}
+
+function renderOverview(root) {
+  let html = '';
+  const byCity = {};
+  for (const s of lastData) {
+    (byCity[s.city] ||= []).push(s);
+  }
+  for (const city of Object.keys(MY_STATIONS)) {
+    const list = byCity[city] || [];
+    if (list.length === 0) continue;
+
+    const stnHtml = list.map(s => {
+      const g = s.offline ? 'off' : (s.allNull ? 'miss' : s.khai);
+      const cls = g === 'miss' ? '' : g;
+
+      const pmCls = s.over.pm10 ? 'crit' : (s.flags.pm10 ? 'miss' : '');
+      const p25Cls = s.over.pm25 ? 'crit' : (s.flags.pm25 ? 'miss' : '');
+      const no2Cls = s.over.no2 ? 'warn' : (s.flags.no2 ? 'miss' : '');
+      const o3Cls = s.over.o3 ? 'warn' : (s.flags.o3 ? 'miss' : '');
+
+      return `<div class="stn ${cls}" data-station="${s.station}">
+        <div class="stn-name">${s.station}</div>
+        <span class="stn-grade ${g}">${gradeLabel(g)}</span>
+        <div class="stn-vals">
+          <div><span style="color:var(--text-mute)">P10</span> <span class="v ${pmCls}">${s.vals.pm10 ?? '—'}</span></div>
+          <div><span style="color:var(--text-mute)">P25</span> <span class="v ${p25Cls}">${s.vals.pm25 ?? '—'}</span></div>
+          <div><span style="color:var(--text-mute)">NO₂</span> <span class="v ${no2Cls}">${s.vals.no2?.toFixed(3) ?? '—'}</span></div>
+          <div><span style="color:var(--text-mute)">O₃</span> <span class="v ${o3Cls}">${s.vals.o3?.toFixed(3) ?? '—'}</span></div>
+        </div>
+      </div>`;
+    }).join('');
+
+    html += `<div class="city-group">
+      <div class="city-head">
+        <span class="city-name">${city}</span>
+        <span class="city-count">${list.length}개소</span>
+      </div>
+      <div class="stn-grid">${stnHtml}</div>
+    </div>`;
+  }
+  root.innerHTML = html;
+
+  root.querySelectorAll('.stn').forEach(el => {
+    el.addEventListener('click', () => openDetail(el.dataset.station));
+  });
+}
+
+function renderFilter(root) {
+  const FILTER_TYPES = ['EM', 'MetOne', 'Kimoto', 'Sibata', '제로에어 활성탄', '제로에어 PURAFIL', '기타'];
+
+  let html = `<div style="background: var(--bg-elev); border-left: 3px solid var(--good); padding: 10px 12px; border-radius: 6px; font-size: 12px; color: var(--text-dim); line-height: 1.5; margin-bottom: 14px;">
+    🔧 측정소별 장비·필터 정보를 등록하면 잔여일이 임박한 항목이 자동으로 표시됩니다.<br>
+    Phase 2에서 기존 자재관리 시스템과 자동 연동될 예정입니다.
+  </div>`;
+
+  const byCity = {};
+  for (const [city, stns] of Object.entries(MY_STATIONS)) {
+    byCity[city] = stns;
+  }
+
+  for (const [city, stns] of Object.entries(byCity)) {
+    html += `<div class="city-group">
+      <div class="city-head"><span class="city-name">${city}</span><span class="city-count">${stns.length}개소</span></div>`;
+    for (const stn of stns) {
+      const filters = cfg.filters[stn] || [];
+      const rows = filters.map((f, idx) => {
+        const remaining = filterRemaining(f);
+        const cls = remaining == null ? '' : (remaining < 0 ? 'crit' : (remaining <= 7 ? 'warn' : ''));
+        const display = remaining == null ? '—' : (remaining < 0 ? `${-remaining}일 경과` : `${remaining}일`);
+        return `<div class="filter-row" data-station="${stn}" data-idx="${idx}">
+          <input type="text" placeholder="필터/장비명" value="${escapeAttr(f.name || '')}" data-k="name">
+          <select data-k="type" style="background:var(--bg-elev);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:6px;font-family:inherit;font-size:12px;outline:none;">
+            ${FILTER_TYPES.map(t => `<option value="${t}" ${t === f.type ? 'selected' : ''}>${t}</option>`).join('')}
+          </select>
+          <span class="remaining ${cls}">${display}</span>
+          <button class="icon-x" data-action="del">×</button>
+        </div>
+        <div class="filter-row" style="margin-bottom: 6px;">
+          <input type="date" value="${f.lastReplaced || ''}" data-k="lastReplaced" style="grid-column: 1 / 3;">
+          <input type="number" placeholder="주기(일)" value="${f.intervalDays || ''}" data-k="intervalDays">
+        </div>`;
+      }).join('');
+      html += `<div class="filter-stn">
+        <div class="filter-stn-head">
+          <span class="filter-stn-name"><span class="city">${city}</span>${stn}</span>
+        </div>
+        <div class="filter-list" data-station="${stn}">${rows}</div>
+        <button class="filter-add" data-add="${stn}">＋ 필터/장비 추가</button>
+      </div>`;
+    }
+    html += `</div>`;
+  }
+  root.innerHTML = html;
+
+  // 추가 버튼
+  root.querySelectorAll('[data-add]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const stn = btn.dataset.add;
+      cfg.filters[stn] ||= [];
+      cfg.filters[stn].push({ name: '', type: 'EM', lastReplaced: '', intervalDays: 30 });
+      saveCfg();
+      renderTab();
+    });
+  });
+  // 삭제
+  root.querySelectorAll('[data-action="del"]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      const row = btn.closest('.filter-row');
+      const stn = row.dataset.station;
+      const idx = Number(row.dataset.idx);
+      cfg.filters[stn].splice(idx, 1);
+      if (cfg.filters[stn].length === 0) delete cfg.filters[stn];
+      saveCfg();
+      renderTab();
+    });
+  });
+  // 변경
+  root.querySelectorAll('.filter-row').forEach(row => {
+    const stn = row.dataset.station;
+    if (!stn) return;
+    const idx = Number(row.dataset.idx);
+    row.querySelectorAll('[data-k]').forEach(inp => {
+      inp.addEventListener('change', () => {
+        const k = inp.dataset.k;
+        const v = k === 'intervalDays' ? (Number(inp.value) || 0) : inp.value;
+        if (cfg.filters[stn] && cfg.filters[stn][idx]) {
+          cfg.filters[stn][idx][k] = v;
+          saveCfg();
+        }
+      });
+    });
+  });
+}
+
+function filterRemaining(f) {
+  if (!f.lastReplaced || !f.intervalDays) return null;
+  const last = new Date(f.lastReplaced + 'T00:00:00+09:00');
+  if (isNaN(last.getTime())) return null;
+  const due = new Date(last.getTime() + f.intervalDays * 86400000);
+  const diff = Math.floor((due.getTime() - Date.now()) / 86400000);
+  return diff;
+}
+
+function escapeAttr(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+/* ---------------- 상세 모달 ---------------- */
+function openDetail(stationName) {
+  const s = lastData.find(x => x.station === stationName);
+  if (!s) return;
+  document.getElementById('detailTitle').textContent = s.station;
+  document.getElementById('detailSub').textContent = `${s.city} · ${gradeLabel(s.khai)}`;
+
+  const cells = [
+    { k: 'PM10',  v: s.vals.pm10,  u: '㎍/㎥', over: s.over.pm10 },
+    { k: 'PM2.5', v: s.vals.pm25,  u: '㎍/㎥', over: s.over.pm25 },
+    { k: 'NO₂',   v: s.vals.no2?.toFixed(3), u: 'ppm', over: s.over.no2 },
+    { k: 'O₃',    v: s.vals.o3?.toFixed(3),  u: 'ppm', over: s.over.o3 },
+    { k: 'CO',    v: s.vals.co?.toFixed(1),  u: 'ppm', over: s.over.co },
+    { k: 'SO₂',   v: s.vals.so2?.toFixed(3), u: 'ppm', over: s.over.so2 }
+  ];
+  document.getElementById('detailGrid').innerHTML = cells.map(c => {
+    const color = c.over ? 'color: var(--vbad)' : '';
+    return `<div class="detail-cell">
+      <div class="k">${c.k}</div>
+      <div class="v" style="${color}">${c.v ?? '—'}<span class="u">${c.u}</span></div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('detailTime').textContent = s.raw.dataTime || '—';
+
+  // Flag 정보
+  const flagsHtml = s.missingItems.length > 0
+    ? `<label class="field-label">상태 플래그</label>` + s.missingItems.map(m =>
+        `<div style="background:rgba(229,57,53,0.1);border:1px solid rgba(229,57,53,0.3);border-radius:6px;padding:6px 10px;margin-bottom:4px;font-size:12px;">
+          <strong>${m.key.toUpperCase()}</strong>: ${m.flag}
+        </div>`
+      ).join('')
+    : '';
+  document.getElementById('detailFlags').innerHTML = flagsHtml;
+
+  document.getElementById('detailModal').classList.add('open');
+}
+document.getElementById('closeDetail').addEventListener('click', () => {
+  document.getElementById('detailModal').classList.remove('open');
+});
+
+/* ---------------- 갱신 ---------------- */
+async function refresh(manual = false) {
+  if (manual) {
+    const btn = document.getElementById('refreshBtn');
+    btn.classList.add('spinning');
+    setTimeout(() => btn.classList.remove('spinning'), 800);
+  }
+  if (!cfg.apiKey) { renderTab(); return; }
+
+  setLive('갱신 중…', 'loading');
+  try {
+    const items = await fetchAllGyeonggi();
+    lastData = processData(items);
+    lastFetchTime = new Date();
+    updateStats();
+    renderTab();
+    const hhmm = lastFetchTime.toTimeString().slice(0, 5);
+    setLive(`실시간 · ${hhmm} 갱신`, 'ok');
+  } catch (e) {
+    console.error(e);
+    setLive(`오류 · ${e.message}`, 'error');
+    if (lastData.length === 0) {
+      document.getElementById('content').innerHTML = `<div class="empty">
+        <div class="emoji">⚠️</div>
+        <div class="title">불러오기 실패</div>
+        <div class="desc">${e.message}<br><br>CORS 오류라면 설정에서 프록시를 입력해주세요</div>
+      </div>`;
+    }
+  }
+}
+
+function startAutoRefresh() {
+  if (refreshTimer) clearInterval(refreshTimer);
+  refreshTimer = setInterval(() => refresh(false), cfg.refreshMin * 60 * 1000);
+}
+
+/* ---------------- 탭 ---------------- */
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    currentTab = t.dataset.tab;
+    renderTab();
+  });
+});
+
+/* ---------------- 설정 ---------------- */
+function openSettings() {
+  document.getElementById('apiKeyInput').value = cfg.apiKey;
+  document.getElementById('proxyInput').value = cfg.proxy;
+  document.getElementById('refreshMin').value = cfg.refreshMin;
+  for (const k of ['pm10','pm25','no2','o3','co','so2']) {
+    document.getElementById('th_' + k).value = cfg.thresholds[k];
+  }
+  document.getElementById('settingsModal').classList.add('open');
+}
+document.getElementById('settingsBtn').addEventListener('click', openSettings);
+document.getElementById('cancelSettings').addEventListener('click', () => {
+  document.getElementById('settingsModal').classList.remove('open');
+});
+document.getElementById('saveSettings').addEventListener('click', () => {
+  cfg.apiKey = document.getElementById('apiKeyInput').value.trim();
+  cfg.proxy = document.getElementById('proxyInput').value.trim();
+  cfg.refreshMin = Math.max(5, Number(document.getElementById('refreshMin').value) || 10);
+  for (const k of ['pm10','pm25','no2','o3','co','so2']) {
+    const v = Number(document.getElementById('th_' + k).value);
+    if (isFinite(v) && v > 0) cfg.thresholds[k] = v;
+  }
+  saveCfg();
+  document.getElementById('settingsModal').classList.remove('open');
+  startAutoRefresh();
+  refresh(true);
+});
+
+document.getElementById('refreshBtn').addEventListener('click', () => refresh(true));
+
+// 측정소 매핑 초기화 (HTML 코드 기준으로 다시 읽기)
+document.getElementById('resetStations').addEventListener('click', () => {
+  if (!confirm('저장된 측정소 매핑을 삭제하고 HTML 코드의 기본 목록으로 되돌립니다.\n\n계속하시겠습니까?')) return;
+  delete cfg.stations;
+  saveCfg();
+  location.reload();
+});
+
+/* ---------------- Boot ---------------- */
+document.getElementById('brandSub').textContent = `경기 ${Object.keys(MY_STATIONS).length}개시 · ${TOTAL_COUNT}측정소`;
+renderTab();
+refresh(true);
+startAutoRefresh();
+
+/* ---------------- PWA: Service Worker 등록 ---------------- */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {
+      // 로컬 파일(file://)이나 sw.js가 없는 환경에서는 등록 실패 - 정상
+    });
+  });
+}
+</script>
+
+</body>
+</html>

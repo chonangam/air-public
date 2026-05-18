@@ -1,0 +1,21 @@
+{
+  "name": "대기측정망 모니터링",
+  "short_name": "대기측정망",
+  "description": "경기도 14개시 61개 측정소 실시간 대기질 모니터링",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#0a0e1a",
+  "background_color": "#0a0e1a",
+  "lang": "ko",
+  "categories": ["productivity", "utilities"],
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

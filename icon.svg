@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- 배경 (어두운 네이비, 둥근 모서리) -->
+  <rect width="512" height="512" rx="96" fill="#0a0e1a"/>
+
+  <!-- 그라데이션 정의 -->
+  <defs>
+    <linearGradient id="g1" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#43a047"/>
+      <stop offset="0.5" stop-color="#1e88e5"/>
+      <stop offset="1" stop-color="#43a047"/>
+    </linearGradient>
+    <radialGradient id="g2" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#43a047" stop-opacity="0.4"/>
+      <stop offset="1" stop-color="#43a047" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- 후광 효과 -->
+  <circle cx="256" cy="256" r="240" fill="url(#g2)"/>
+
+  <!-- 동심원 (측정망 시각화) -->
+  <circle cx="256" cy="256" r="180" fill="none" stroke="url(#g1)" stroke-width="3" opacity="0.2"/>
+  <circle cx="256" cy="256" r="130" fill="none" stroke="url(#g1)" stroke-width="4" opacity="0.4"/>
+  <circle cx="256" cy="256" r="80" fill="none" stroke="url(#g1)" stroke-width="6" opacity="0.7"/>
+
+  <!-- 측정소 점들 -->
+  <circle cx="256" cy="76" r="14" fill="#43a047"/>
+  <circle cx="436" cy="256" r="12" fill="#1e88e5"/>
+  <circle cx="256" cy="436" r="14" fill="#43a047"/>
+  <circle cx="76" cy="256" r="12" fill="#1e88e5"/>
+  <circle cx="383" cy="129" r="10" fill="#fb8c00"/>
+  <circle cx="383" cy="383" r="10" fill="#43a047"/>
+  <circle cx="129" cy="383" r="10" fill="#43a047"/>
+  <circle cx="129" cy="129" r="10" fill="#1e88e5"/>
+
+  <!-- 중심부 (데이터 허브) -->
+  <circle cx="256" cy="256" r="36" fill="#0a0e1a" stroke="url(#g1)" stroke-width="4"/>
+  <circle cx="256" cy="256" r="14" fill="url(#g1)"/>
+</svg>
