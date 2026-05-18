@@ -650,7 +650,14 @@
     border-radius: 6px;
     padding: 8px 10px;
   }
-  .mm-target { font-size: 12px; margin-bottom: 6px; }
+  .mm-target {
+    font-size: 12px;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
   .mm-city { color: var(--text-mute); font-size: 11px; }
   .mm-candidates { display: flex; flex-wrap: wrap; gap: 5px; }
   .mm-btn {
@@ -667,6 +674,22 @@
   .mm-btn:hover { background: var(--good); border-color: var(--good); color: white; }
   .mm-btn:active { transform: scale(0.95); }
   .mm-empty { font-size: 11px; color: var(--text-mute); font-style: italic; }
+  .mm-del-btn {
+    background: rgba(229,57,53,0.12);
+    border: 1px solid rgba(229,57,53,0.35);
+    color: var(--vbad);
+    padding: 3px 9px;
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .mm-del-btn:hover { background: var(--vbad); color: white; border-color: var(--vbad); }
+  .mm-del-btn:active { transform: scale(0.94); }
 </style>
 </head>
 <body>
@@ -808,7 +831,7 @@ const STORAGE_KEY = 'airdash_v1';
 const MY_STATIONS = {
   "고양시":   ["식사동","신원동","백마로","주엽동","행신동"],
   "김포시":   ["고촌읍","사우동","월곶면","한강신도시","한강로"],
-  "양주시":   ["고읍","백석읍"],
+  "양주시":   ["고읍","백석읍","남면","옥정신도시"],
   "의정부시": ["송산3동","의정부동","의정부1동"],
   "구리시":   ["교문동","동구동"],
   "동두천시": ["보산동"],
@@ -828,6 +851,13 @@ for (const [city, stns] of Object.entries(MY_STATIONS)) {
   for (const s of stns) STATION_TO_CITY[s] = city;
 }
 const TOTAL_COUNT = Object.values(MY_STATIONS).reduce((a,b) => a + b.length, 0);
+function totalCount() {
+  return Object.values(MY_STATIONS).reduce((a, b) => a + b.length, 0);
+}
+function updateBrandSub() {
+  const el = document.getElementById('brandSub');
+  if (el) el.textContent = `경기 ${Object.keys(MY_STATIONS).length}개시 · ${totalCount()}측정소`;
+}
 
 /* ---------------- 기본 설정 ---------------- */
 const DEFAULT = {
@@ -1066,7 +1096,7 @@ function updateStats() {
     else if (s.priority === 'over' || s.priority === 'partial') warn++;
     else if (s.priority === 'missing' || s.priority === 'offline') miss++;
   }
-  document.getElementById('statTotal').innerHTML = `${lastData.length} <span class="total">/${TOTAL_COUNT}</span>`;
+  document.getElementById('statTotal').innerHTML = `${lastData.length} <span class="total">/${totalCount()}</span>`;
   document.getElementById('statOk').textContent = ok;
   document.getElementById('statWarn').textContent = warn;
   document.getElementById('statMiss').textContent = miss;
@@ -1126,10 +1156,13 @@ function renderPriority(root) {
       아래 후보 중 맞는 것을 탭하면 자동으로 교체됩니다.
       <div class="mm-list">${mismatched.map((m, i) => `
         <div class="mm-item">
-          <div class="mm-target"><span class="mm-city">${m.city}</span> · <strong>${m.station}</strong></div>
+          <div class="mm-target">
+            <span><span class="mm-city">${m.city}</span> · <strong>${m.station}</strong></span>
+            <button class="mm-del-btn" data-city="${m.city}" data-station="${m.station}">🗑️ 삭제</button>
+          </div>
           ${m.candidates.length > 0
             ? `<div class="mm-candidates">${m.candidates.map(c => `<button class="mm-btn" data-city="${m.city}" data-old="${m.station}" data-new="${c}">${c}</button>`).join('')}</div>`
-            : `<div class="mm-empty">유사 측정소 없음 (이름 폐쇄/변경 가능성)</div>`}
+            : `<div class="mm-empty">유사 측정소 없음 — 폐쇄됐거나 이름이 크게 다를 수 있음. 삭제 후 필요시 직접 추가하세요</div>`}
         </div>`).join('')}</div>
     </div>`;
   }
@@ -1177,6 +1210,30 @@ function renderPriority(root) {
       // 변경된 매핑 저장
       cfg.stations = JSON.parse(JSON.stringify(MY_STATIONS));
       saveCfg();
+      refresh(true);
+    });
+  });
+
+  // 측정소 삭제 버튼
+  root.querySelectorAll('.mm-del-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const city = btn.dataset.city;
+      const station = btn.dataset.station;
+      if (!confirm(`${city} · ${station} 측정소를 목록에서 삭제합니다.\n\n필터 매핑 정보도 함께 삭제됩니다.\n계속하시겠습니까?`)) return;
+      const arr = MY_STATIONS[city];
+      if (!arr) return;
+      const idx = arr.indexOf(station);
+      if (idx === -1) return;
+      arr.splice(idx, 1);
+      // 시에 측정소가 0개 남으면 시 자체 제거
+      if (arr.length === 0) delete MY_STATIONS[city];
+      // 필터 매핑 / 역인덱스 정리
+      delete cfg.filters[station];
+      delete STATION_TO_CITY[station];
+      // 변경된 매핑 저장
+      cfg.stations = JSON.parse(JSON.stringify(MY_STATIONS));
+      saveCfg();
+      updateBrandSub();
       refresh(true);
     });
   });
@@ -1497,7 +1554,7 @@ document.getElementById('resetStations').addEventListener('click', () => {
 });
 
 /* ---------------- Boot ---------------- */
-document.getElementById('brandSub').textContent = `경기 ${Object.keys(MY_STATIONS).length}개시 · ${TOTAL_COUNT}측정소`;
+document.getElementById('brandSub').textContent = `경기 ${Object.keys(MY_STATIONS).length}개시 · ${totalCount()}측정소`;
 renderTab();
 refresh(true);
 startAutoRefresh();
